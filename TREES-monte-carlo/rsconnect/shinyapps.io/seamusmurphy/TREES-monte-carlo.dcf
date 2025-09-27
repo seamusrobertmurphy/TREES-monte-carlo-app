@@ -1,0 +1,12 @@
+name: trees-monte-carlo
+title: trees-monte-carlo
+username: seamusmurphy
+account: seamusmurphy
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15582399
+bundleId: 10960290
+url: https://seamusmurphy.shinyapps.io/trees-monte-carlo/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
