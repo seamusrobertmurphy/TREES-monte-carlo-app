@@ -111,7 +111,7 @@ create_enhanced_guyana_data <- function() {
   ))
 }
 
-# FIXED: Monte Carlo simulation with working hyperparameter optimization for small datasets
+# Monte Carlo simulation with working hyperparameter optimization for small datasets
 run_enhanced_monte_carlo <- function(data, hfld_crediting_level, n_iterations = 10000, 
                                    use_bootstrap = FALSE,
                                    # Hyperparameter options
@@ -134,13 +134,12 @@ run_enhanced_monte_carlo <- function(data, hfld_crediting_level, n_iterations = 
   bias_correction_factor <- 1.0
   tuning_results <- NULL
   
-  # FIXED: Only attempt hyperparameter tuning for suitable models with adequate data
+  # Only attempt hyperparameter tuning for suitable models with adequate data
   if(requireNamespace("caret", quietly = TRUE)) {
     tryCatch({
       
-      # AGGRESSIVE: Create much larger expanded dataset for Monte Carlo LGOCV
       # Generate extensive synthetic samples to ensure LGOCV reliability
-      samples_per_stratum <- 100  # Fixed large number for reliability
+      samples_per_stratum <- 100
       
       expanded_samples <- do.call(rbind, lapply(1:n_strata, function(i) {
         
@@ -172,9 +171,9 @@ run_enhanced_monte_carlo <- function(data, hfld_crediting_level, n_iterations = 
       
       cat("Generated", nrow(expanded_samples), "samples for LGOCV\n")
       
-      # FIXED: Conservative LGOCV setup for ART-TREES compliance
+      # Conservative LGOCV setup for ART-TREES compliance
       cv_folds_safe <- min(cv_folds, 8)  # Maximum 8 folds for stability
-      train_percentage_safe <- 0.75  # Fixed 75% for reliability
+      train_percentage_safe <- 0.75  # 75% found most reliable
       
       mc_control <- trainControl(
         method = "LGOCV",  # MUST maintain Monte Carlo design
@@ -189,7 +188,6 @@ run_enhanced_monte_carlo <- function(data, hfld_crediting_level, n_iterations = 
       
       # ULTRA-CONSERVATIVE: Model-specific safe parameter grids
       if(model_method == "rf") {
-        # Very conservative RF parameters
         max_features <- ncol(expanded_samples) - 2  # Exclude emissions and stratum_id
         safe_mtry <- c(2, min(4, max_features))
         tune_grid <- expand.grid(mtry = safe_mtry)
@@ -787,7 +785,7 @@ ui <- dashboardPage(
       br()
     ),
     
-    # Original ART TREES Parameters
+    # ART TREES Parameters
     h4("ART TREES Parameters", style = "color: white; margin-left: 15px;"),
     div(style = "color: #bbb; margin-left: 15px; font-size: 11px;",
         p("• Monte Carlo Iterations: 10,000"),
@@ -876,7 +874,7 @@ ui <- dashboardPage(
     ),
     
     tabItems(
-      # Monte Carlo Results Tab (ORIGINAL)
+      # Monte Carlo Results Tab 
       tabItem(tabName = "simulation",
         fluidRow(
           valueBoxOutput("total_emissions_box", width = 3),
@@ -968,7 +966,7 @@ ui <- dashboardPage(
         )
       ),
       
-      # Hyperparameter Tuning Tab (ORIGINAL)
+      # Hyperparameter Tuning Tab
       tabItem(tabName = "hyperparameters",
         fluidRow(
           valueBoxOutput("tuning_method_box", width = 3),
@@ -1032,7 +1030,6 @@ ui <- dashboardPage(
       ),
       
       # Methodology Tab
-      # Methodology Tab (UPDATED)
       tabItem(tabName = "methodology",
         fluidRow(
           box(
@@ -1277,7 +1274,7 @@ server <- function(input, output, session) {
     return(data)
   })
   
-  # Enhanced Monte Carlo results with fixed hyperparameter optimization
+  # Enhanced Monte Carlo results with hyperparameter optimization
   mc_results <- eventReactive(input$run_simulation, {
     data <- adjusted_data()
     hfld_cl <- enhanced_data()$hfld_crediting_level
@@ -2030,7 +2027,7 @@ server <- function(input, output, session) {
     }
   })
   
-  # Data tables (unchanged from original)
+  # Data tables 
   output$monte_carlo_input_table <- DT::renderDataTable({
     data <- enhanced_data()$monte_carlo_data
     
