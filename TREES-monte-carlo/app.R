@@ -8,6 +8,7 @@ pacman::p_load(
 	BiocManager,
   caret,
 	dplyr, DT,
+	ellmer,
   ggplot2,
   MASS,
 	plotly,
