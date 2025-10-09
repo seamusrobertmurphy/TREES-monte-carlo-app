@@ -11,7 +11,7 @@ pacman::p_load(
 	caret,
 	dplyr, DT,
 	ellmer,
-	ggplot2,
+	ggplot2, gbm,
 	MASS, magrittr,
 	plotly,
 	shiny, shinyWidgets, shinyjs,
@@ -919,46 +919,118 @@ ui <- page_fillable(
 				)
 			),
 
-			# TAB 3: Hyperparameter Tuning
-			nav_panel(
-				title = "3. Hyperparameters",
-				icon = icon("cogs"),
-				layout_columns(
-					col_widths = c(3, 3, 3, 3),
-					fill = FALSE,
-					value_box(title = "Optimization Model", value = textOutput("tuning_method_text"),
-							  showcase = icon("cogs"), theme = "primary"),
-					value_box(title = "Best RMSE", value = textOutput("best_performance_text"),
-							  showcase = icon("bullseye"), theme = "warning"),
-					value_box(title = "Bias Correction", value = textOutput("bias_correction_text"),
-							  showcase = icon("balance-scale"), theme = "secondary"),
-					value_box(title = "Tuning", value = textOutput("optimization_status_text"),
-							  showcase = icon("check-circle"), theme = "info")
-				),
-				layout_columns(
-					col_widths = c(8, 4),
-					fill = FALSE,
-					card(
-						card_header("Hyperparameter Optimization Results"),
-						card_body(DT::dataTableOutput("hyperparameter_results_table"))
-					),
-					card(
-						card_header("Model Performance Comparison"),
-						card_body(plotOutput("performance_comparison_plot", height = "300px"))
-					)
-				),
-				layout_columns(
-					col_widths = c(6, 6),
-					card(
-						card_header("Cross-Validation Summary"),
-						card_body(verbatimTextOutput("cv_summary"))
-					),
-					card(
-						card_header("Variable Importance"),
-						card_body(plotOutput("variable_importance_plot", height = "300px"))
-					)
-				)
-			),
+# TAB 3: Hyperparameter Tuning
+nav_panel(
+  title = "3. Hyperparameters",
+  icon = icon("cogs"),
+  
+  # Value boxes (existing)
+  layout_columns(
+    col_widths = c(3, 3, 3, 3),
+    fill = FALSE,
+    value_box(title = "Optimization Model", value = textOutput("tuning_method_text"),
+              showcase = icon("cogs"), theme = "primary"),
+    value_box(title = "Best RMSE", value = textOutput("best_performance_text"),
+              showcase = icon("bullseye"), theme = "warning"),
+    value_box(title = "Bias Correction", value = textOutput("bias_correction_text"),
+              showcase = icon("balance-scale"), theme = "secondary"),
+    value_box(title = "Tuning", value = textOutput("optimization_status_text"),
+              showcase = icon("check-circle"), theme = "info")
+  ),
+  
+  # Current run results (existing)
+  layout_columns(
+    col_widths = c(8, 4),
+    fill = FALSE,
+    card(
+      card_header("Hyperparameter Optimization Results"),
+      card_body(
+        fillable = FALSE,
+        DT::dataTableOutput("hyperparameter_results_table")
+      )
+    ),
+    card(
+      card_header("Model Performance Comparison"),
+      card_body(
+        fillable = FALSE,
+        plotOutput("performance_comparison_plot", height = "300px")
+      )
+    )
+  ),
+  
+  # CV Summary + Variable Importance (existing)
+  layout_columns(
+    col_widths = c(6, 6),
+    fill = FALSE,
+    card(
+      card_header("Cross-Validation Summary"),
+      card_body(
+        fillable = FALSE,
+        div(style = "height: 300px; overflow-y: auto; font-size: 0.85rem;",
+          verbatimTextOutput("cv_summary")
+        )
+      )
+    ),
+    card(
+      card_header("Variable Importance"),
+      card_body(
+        fillable = FALSE,
+        plotOutput("variable_importance_plot", height = "300px")
+      )
+    )
+  ),
+  
+  # NEW: Model History Comparison Section
+  card(
+    card_header("Multi-Model Comparison History"),
+    card_body(
+      layout_columns(
+        col_widths = c(4, 4, 4),
+        fill = FALSE,
+        actionButton("clear_history", "Clear History", 
+                     class = "btn-warning btn-sm", style = "width: 100%;"),
+        downloadButton("download_model_history", "Export History", 
+                      class = "btn-info btn-sm", style = "width: 100%;"),
+        tags$div(
+          style = "padding-top: 8px; text-align: center;",
+          textOutput("history_count")
+        )
+      )
+    )
+  ),
+  
+  # Model comparison visualizations
+  layout_columns(
+    col_widths = c(12),
+    fill = FALSE,
+    card(
+      card_header("Model History Table"),
+      card_body(
+        fillable = FALSE,
+        DT::dataTableOutput("model_history_table")
+      )
+    )
+  ),
+  
+  layout_columns(
+    col_widths = c(6, 6),
+    fill = FALSE,
+    card(
+      card_header("Performance Comparison Across Runs"),
+      card_body(
+        fillable = FALSE,
+        plotOutput("model_comparison_plot", height = "400px")
+      )
+    ),
+    card(
+      card_header("Net ERRs Comparison Across Runs"),
+      card_body(
+        fillable = FALSE,
+        plotOutput("net_errs_comparison_plot", height = "400px")
+      )
+    )
+  )
+),
 			
 			# TAB 4: Monte Carlo
 			nav_panel(
@@ -983,14 +1055,19 @@ ui <- page_fillable(
 					fill = FALSE,
 					card(
 						card_header("Monte Carlo Distribution"),
-						card_body(fillable = FALSE, plotlyOutput("enhanced_distribution_plot", height = "300px"))
+						card_body(
+							fillable = FALSE, 
+							plotOutput("enhanced_distribution_plot", 
+													 height = "400px"))
 					),
 					card(
 						card_header("Uncertainty Summary"),
-						card_body(fillable = FALSE, DT::dataTableOutput("uncertainty_summary"))
-					)
-				),
-				
+						card_body(
+							fillable = FALSE, 
+							DT::dataTableOutput("uncertainty_summary")
+							)
+						)
+					),
 				layout_columns(
 					col_widths = c(6, 6),
 					fill = FALSE,
@@ -1132,6 +1209,22 @@ server <- function(input, output, session) {
 	current_analysis <- reactiveVal(NULL)
 	all_analyses <- reactiveVal(NULL)
 	
+  # NEW: Store history of model runs for comparison
+  model_history <- reactiveVal(data.frame(
+    run_id = integer(),
+    timestamp = character(),
+    model_method = character(),
+    cv_folds = integer(),
+    performance_metric = character(),
+    best_performance = numeric(),
+    bias_correction = numeric(),
+    mean_emissions = numeric(),
+    ci_percent = numeric(),
+    net_errs = numeric(),
+    use_bootstrap = logical(),
+    stringsAsFactors = FALSE
+  ))
+  
 	# Auto-load distribution analysis on startup
 	observe({
 		priority = 100
@@ -1304,30 +1397,54 @@ server <- function(input, output, session) {
 		return(data)
 	})
 	
-	# Enhanced Monte Carlo results with hyperparameter optimization
-	mc_results <- eventReactive(input$run_simulation, {
-		data <- adjusted_data()
-		hfld_cl <- enhanced_data()$hfld_crediting_level
-		
-		withProgress(message = 'Running Enhanced Monte Carlo...', value = 0, {
-			incProgress(0.2, detail = "Optimizing hyperparameters")
-			
-			result <- run_enhanced_monte_carlo(
-				data = data, 
-				hfld_crediting_level = hfld_cl, 
-				use_bootstrap = input$use_bootstrap,
-				model_method = input$model_method,
-				cv_folds = input$cv_folds,
-				performance_metric = input$performance_metric,
-				tune_length = input$tune_length,
-				enable_preprocessing = input$enable_preprocessing,
-				enable_feature_selection = input$enable_feature_selection
-			)
-			
-			incProgress(0.7, detail = "Calculating ART TREES metrics")
-			result
-		})
-	})
+# Enhanced Monte Carlo results with hyperparameter optimization
+mc_results <- eventReactive(input$run_simulation, {
+  data <- adjusted_data()
+  hfld_cl <- enhanced_data()$hfld_crediting_level
+  
+  withProgress(message = 'Running Enhanced Monte Carlo...', value = 0, {
+    incProgress(0.2, detail = "Optimizing hyperparameters")
+    
+    result <- run_enhanced_monte_carlo(
+      data = data, 
+      hfld_crediting_level = hfld_cl, 
+      use_bootstrap = input$use_bootstrap,
+      model_method = input$model_method,
+      cv_folds = input$cv_folds,
+      performance_metric = input$performance_metric,
+      tune_length = input$tune_length,
+      enable_preprocessing = input$enable_preprocessing,
+      enable_feature_selection = input$enable_feature_selection
+    )
+    
+    incProgress(0.7, detail = "Calculating ART TREES metrics")
+    
+    # NEW: Save to model history
+    current_history <- model_history()
+    new_run <- data.frame(
+      run_id = nrow(current_history) + 1,
+      timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+      model_method = input$model_method,
+      cv_folds = input$cv_folds,
+      performance_metric = input$performance_metric,
+      best_performance = if(result$tuning_applied && !is.null(result$tuning_results)) {
+        min(result$tuning_results$cv_results[[input$performance_metric]], na.rm = TRUE)
+      } else {
+        result$simulated_sd  # Use SD as proxy for non-tuned models
+      },
+      bias_correction = result$bias_correction_factor,
+      mean_emissions = result$simulated_mean,
+      ci_percent = result$ci_90_percent_of_mean,
+      net_errs = result$net_errs,
+      use_bootstrap = input$use_bootstrap,
+      stringsAsFactors = FALSE
+    )
+    
+    model_history(rbind(current_history, new_run))
+    
+    result
+  })
+})
 	
 	# ============================================================================
 	# DISTRIBUTION ANALYSIS EVENT OBSERVERS 
@@ -1517,8 +1634,184 @@ server <- function(input, output, session) {
 		showNotification("Hyperparameter configuration saved", type = "success")
 	})
 
-	# Code Tools outputs
 
+# Clear model history
+observeEvent(input$clear_history, {
+  model_history(data.frame(
+    run_id = integer(),
+    timestamp = character(),
+    model_method = character(),
+    cv_folds = integer(),
+    performance_metric = character(),
+    best_performance = numeric(),
+    bias_correction = numeric(),
+    mean_emissions = numeric(),
+    ci_percent = numeric(),
+    net_errs = numeric(),
+    use_bootstrap = logical(),
+    stringsAsFactors = FALSE
+  ))
+  showNotification("Model history cleared", type = "message")
+})
+
+# Download model history
+output$download_model_history <- downloadHandler(
+  filename = function() {
+    paste0("ART_TREES_Model_History_", Sys.Date(), ".csv")
+  },
+  content = function(file) {
+    write.csv(model_history(), file, row.names = FALSE)
+  }
+)
+
+# NEW: Model History Comparison Table
+output$model_history_table <- DT::renderDataTable({
+  history <- model_history()
+  
+  if(nrow(history) == 0) {
+    return(DT::datatable(
+      data.frame(Message = "Run simulations to build model comparison history"),
+      options = list(dom = 't'),
+      rownames = FALSE
+    ))
+  }
+  
+  # Format the display
+  display_history <- history
+  display_history$best_performance <- format(round(display_history$best_performance, 0), big.mark = ",")
+  display_history$mean_emissions <- format(round(display_history$mean_emissions, 0), big.mark = ",")
+  display_history$net_errs <- format(round(display_history$net_errs, 0), big.mark = ",")
+  display_history$ci_percent <- paste0(round(display_history$ci_percent, 2), "%")
+  display_history$bias_correction <- round(display_history$bias_correction, 4)
+  
+  DT::datatable(
+    display_history,
+    options = list(
+      pageLength = 10,
+      dom = 'frtip',
+      scrollX = TRUE,
+      order = list(list(0, 'desc'))  # Sort by run_id descending (newest first)
+    ),
+    rownames = FALSE
+  ) %>%
+    DT::formatStyle(
+      'model_method',
+      backgroundColor = DT::styleEqual(
+        c('lm', 'rf', 'gbm', 'svmRadial', 'glmnet'),
+        c('#e3f2fd', '#fff3e0', '#f3e5f5', '#e8f5e9', '#fce4ec')
+      )
+    )
+})
+
+# NEW: Model Comparison Plot
+output$model_comparison_plot <- renderPlot({
+  history <- model_history()
+  
+  if(nrow(history) == 0) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "Run multiple simulations\nto see model comparisons", cex = 1.0)
+    return()
+  }
+  
+  if(nrow(history) == 1) {
+    par(mar = c(4, 4, 3, 1))
+    barplot(history$best_performance[1],
+            names.arg = history$model_method[1],
+            col = rgb(0, 0.48, 1, 0.7),
+            border = "darkblue",
+            main = paste("Model Performance (", history$performance_metric[1], ")", sep = ""),
+            ylab = history$performance_metric[1],
+            las = 1)
+    return()
+  }
+  
+  par(mar = c(6, 4, 3, 1))
+  
+  # Create comparison plot
+  x_labels <- paste0(history$model_method, "\n(Run ", history$run_id, ")")
+  colors <- rainbow(nrow(history), alpha = 0.7)
+  
+  bp <- barplot(history$best_performance,
+          names.arg = x_labels,
+          col = colors,
+          border = "darkblue",
+          main = paste("Model Performance Comparison (", history$performance_metric[1], ")", sep = ""),
+          ylab = history$performance_metric[1],
+          las = 2,
+          cex.names = 0.8,
+          cex.main = 1.0)
+  
+  # Add values on bars
+  text(bp, history$best_performance, 
+       labels = format(round(history$best_performance, 0), big.mark = ","),
+       pos = 3, cex = 0.7, srt = 90, adj = 0)
+  
+  # Highlight best model
+  best_idx <- which.min(history$best_performance)
+  points(bp[best_idx], history$best_performance[best_idx], 
+         col = "red", pch = 8, cex = 3, lwd = 2)
+  
+  legend("topright",
+         legend = c("Best Model"),
+         pch = 8,
+         col = "red",
+         pt.cex = 2,
+         bty = "n")
+  
+}, height = 400)
+
+output$history_count <- renderText({
+  paste("Models Run:", nrow(model_history()))
+})
+
+# NEW: Net ERRs Comparison Plot
+output$net_errs_comparison_plot <- renderPlot({
+  history <- model_history()
+  
+  if(nrow(history) == 0) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "Run multiple simulations\nto compare Net ERRs", cex = 1.0)
+    return()
+  }
+  
+  par(mar = c(6, 4, 3, 1))
+  
+  x_labels <- paste0(history$model_method, "\n(Run ", history$run_id, ")")
+  colors <- rainbow(nrow(history), alpha = 0.7)
+  
+  bp <- barplot(history$net_errs,
+          names.arg = x_labels,
+          col = colors,
+          border = "darkgreen",
+          main = "Net ERRs Comparison Across Models",
+          ylab = "Net ERRs (tCO2/yr)",
+          las = 2,
+          cex.names = 0.8,
+          cex.main = 1.0,
+          ylim = c(0, max(history$net_errs) * 1.1))
+  
+  # Add values on bars
+  text(bp, history$net_errs, 
+       labels = format(round(history$net_errs, 0), big.mark = ","),
+       pos = 3, cex = 0.7, srt = 90, adj = 0)
+  
+  # Highlight best (maximum) Net ERRs
+  best_idx <- which.max(history$net_errs)
+  points(bp[best_idx], history$net_errs[best_idx], 
+         col = "darkgreen", pch = 8, cex = 3, lwd = 2)
+  
+  legend("topright",
+         legend = c("Highest Net ERRs"),
+         pch = 8,
+         col = "darkgreen",
+         pt.cex = 2,
+         bty = "n")
+  
+}, height = 400)
+
+
+	
+	# Code Tools outputs
 	output$download_full_source <- downloadHandler(
 		filename = function() { "app.R" },	
 		content = function(file) {	
@@ -1881,26 +2174,57 @@ server <- function(input, output, session) {
 	# MONTE CARLO OUTPUTS
 	# ============================================================================
 	
-	output$enhanced_distribution_plot <- renderPlotly({
-		req(mc_results())
-		results <- mc_results()
-		
-		df <- data.frame(emissions = results$total_emissions)
-		
-		p <- ggplot(df, aes(x = emissions)) +
-			geom_histogram(bins = 50, fill = "#007bff", alpha = 0.7, color = "darkblue") +
-			geom_vline(xintercept = results$simulated_mean, color = "#dc3545", linetype = "dashed", size = 1) +
-			geom_vline(xintercept = results$ci_90_lower, color = "#ffc107", linetype = "dotted", size = 1) +
-			geom_vline(xintercept = results$ci_90_upper, color = "#ffc107", linetype = "dotted", size = 1) +
-			labs(title = "Enhanced Monte Carlo Results with Hyperparameter Optimization",
-				 subtitle = paste("Model:", if(results$tuning_applied) results$hyperparameters_used$model_method else "Standard"),
-				 x = "Total Emissions (tCO2/yr)",
-				 y = "Frequency") +
-			theme_minimal() +
-			theme(plot.title = element_text(size = 12, face = "bold"))
-		
-		ggplotly(p)
-	})
+output$enhanced_distribution_plot <- renderPlot({
+  # Validate inputs
+  validate(
+    need(mc_results(), "Run Monte Carlo simulation to see results")
+  )
+  
+  results <- mc_results()
+  
+  validate(
+    need(!is.null(results$total_emissions), "No emissions data available"),
+    need(length(results$total_emissions) > 0, "Emissions data is empty")
+  )
+  
+  # Extract emissions data
+  emissions <- results$total_emissions
+  
+  # Set up plot margins
+  par(mar = c(4, 4, 3, 1))
+  
+  # Create histogram
+  h <- hist(emissions,
+       breaks = 50,
+       col = rgb(0, 0.48, 1, 0.7),
+       border = "darkblue",
+       main = paste("Enhanced Monte Carlo Results\nModel:", 
+                    if(results$tuning_applied) results$hyperparameters_used$model_method else "Standard"),
+       xlab = "Total Emissions (tCO2/yr)",
+       ylab = "Frequency",
+       las = 1,
+       cex.main = 1.0,
+       cex.lab = 0.9)
+  
+  # Add vertical lines for mean and CI
+  abline(v = results$simulated_mean, col = "#dc3545", lwd = 2, lty = 2)
+  abline(v = results$ci_90_lower, col = "#ffc107", lwd = 2, lty = 3)
+  abline(v = results$ci_90_upper, col = "#ffc107", lwd = 2, lty = 3)
+  
+  # Add legend
+  legend("topright",
+         legend = c(
+           paste("Mean:", format(round(results$simulated_mean, 0), big.mark = ",")),
+           paste("90% CI: [", format(round(results$ci_90_lower, 0), big.mark = ","), ",",
+                 format(round(results$ci_90_upper, 0), big.mark = ","), "]")
+         ),
+         col = c("#dc3545", "#ffc107"),
+         lty = c(2, 3),
+         lwd = 2,
+         bty = "n",
+         cex = 0.75)
+  
+}, height = 400, res = 96)
 	
 	output$uncertainty_summary <- DT::renderDataTable({
 		req(mc_results())
@@ -2007,7 +2331,7 @@ server <- function(input, output, session) {
 		ci_change <- current_results$ci_90_percent_of_mean - original_results$ci_90_percent_of_mean
 		
 		paste0(
-			"ENHANCED SENSITIVITY ANALYSIS: ", stratum_name, "\n",
+			"SENSITIVITY ANALYSIS: ", stratum_name, "\n",
 			"=", paste(rep("=", nchar(stratum_name) + 32), collapse = ""), "\n\n",
 			"Hyperparameter Configuration:\n",
 			"• Model: ", input$model_method, "\n",
@@ -2106,89 +2430,232 @@ server <- function(input, output, session) {
 		dt
 	})
 	
-	# ============================================================================
-	# HYPERPARAMETER TUNING OUTPUTS
-	# ============================================================================
+# ============================================================================
+# HYPERPARAMETER TUNING OUTPUTS
+# ============================================================================
 
-	# Hyperparameter results table
-	output$hyperparameter_results_table <- DT::renderDataTable({
-		req(mc_results())
-		results <- mc_results()
-		
-		if(results$tuning_applied && !is.null(results$tuning_results)) {
-			cv_results <- results$tuning_results$cv_results
-			DT::datatable(cv_results, options = list(scrollX = TRUE, pageLength = 10), rownames = FALSE)
-		} else {
-			data.frame(Message = "No hyperparameter optimization results available (Model: Standard/Failed)")
-		}
-	})
-	
-	# Performance comparison plot
-	output$performance_comparison_plot <- renderPlot({
-		req(mc_results())
-		results <- mc_results()
-		
-		if(results$tuning_applied && !is.null(results$tuning_results) && nrow(results$tuning_results$cv_results) > 1) {
-			cv_results <- results$tuning_results$cv_results
-			metric_name <- results$hyperparameters_used$performance_metric
-			
-			ggplot(cv_results, aes(x = 1:nrow(cv_results), y = !!sym(metric_name))) +
-				geom_line(color = "blue", size = 1) +
-				geom_point(color = "red", size = 2) +
-				labs(title = paste("Hyperparameter Performance by", metric_name),
-					 x = "Configuration",
-					 y = metric_name) +
-				theme_minimal() +
-				theme(plot.title = element_text(size = 14, face = "bold"))
-		} else {
-			plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
-			text(1, 1, "Single or failed configuration.\nNo performance comparison available.", cex = 1.0)
-		}
-	})
-	
-	# Variable importance plot
-	output$variable_importance_plot <- renderPlot({
-		req(mc_results())
-		results <- mc_results()
-		
-		if(results$tuning_applied && !is.null(results$tuning_results$variable_importance)) {
-			plot(results$tuning_results$variable_importance, main = "Variable Importance")
-		} else {
-			plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
-			text(1, 1, "Variable importance\nnot available for this model type.", cex = 1.0)
-		}
-	})
-	
-	# CV Summary
-	output$cv_summary <- renderText({
-		req(mc_results())
-		results <- mc_results()
-		
-		if(results$tuning_applied) {
-			paste0(
-				"Cross-Validation Summary\n",
-				"========================\n\n",
-				"Model Method: ", results$hyperparameters_used$model_method, "\n",
-				"Monte Carlo CV: LGOCV (ART-TREES compliant)\n",
-				"CV Folds: ", results$hyperparameters_used$cv_folds, "\n",
-				"Training Percentage: 0.75\n",
-				"Performance Metric: ", results$hyperparameters_used$performance_metric, "\n",
-				"Preprocessing: ", if(results$hyperparameters_used$enable_preprocessing) "Enabled (Center/Scale)" else "Disabled", "\n",
-				"Feature Selection: ", if(results$hyperparameters_used$enable_feature_selection) "Enhanced" else "Basic", "\n",
-				"Bias Correction Applied: ", round(results$bias_correction_factor, 4), "\n\n",
-				"**Impact:** This optimization helps train an uncertainty-reduction model\nbased on synthetic Monte Carlo samples, aiming to reduce the\nfinal uncertainty deduction (UA) as allowed by ART TREES V2.0."
-			)
-		} else {
-			paste0(
-				"Cross-Validation Summary\n",
-				"========================\n\n",
-				"Model Method: Standard Monte Carlo\n",
-				"Status: Optimization not applied (e.g., small dataset, LM model)\n",
-				"Bias Correction: 1.0 (No correction)\n\n",
-				"The simulation runs in standard mode, calculating uncertainty\ndirectly from input CIs using error propagation rules."
-			)
-		}
-	})
+# Hyperparameter results table
+output$hyperparameter_results_table <- DT::renderDataTable({
+  req(mc_results())
+  results <- mc_results()
+  
+  if(results$tuning_applied && !is.null(results$tuning_results)) {
+    cv_results <- results$tuning_results$cv_results
+    DT::datatable(cv_results, 
+                  options = list(scrollX = TRUE, pageLength = 10, dom = 'frtip'), 
+                  rownames = FALSE)
+  } else {
+    DT::datatable(
+      data.frame(Message = "No hyperparameter optimization results available (Model: Standard/Failed)"),
+      options = list(dom = 't'),
+      rownames = FALSE
+    )
+  }
+})
+
+# Performance comparison plot - FINAL VERSION
+output$performance_comparison_plot <- renderPlot({
+  
+  if(is.null(mc_results())) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "Run Monte Carlo\nsimulation first", cex = 1.0)
+    return()
+  }
+  
+  results <- mc_results()
+  
+  if(!results$tuning_applied) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "No hyperparameter tuning applied.\nUsing standard Monte Carlo.", cex = 1.0)
+    return()
+  }
+  
+  if(is.null(results$tuning_results) || is.null(results$tuning_results$cv_results)) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "CV results not available", cex = 1.0)
+    return()
+  }
+  
+  cv_results <- results$tuning_results$cv_results
+  metric_name <- results$hyperparameters_used$performance_metric
+  
+  # Linear models only have one configuration (intercept TRUE/FALSE)
+  if(nrow(cv_results) <= 1) {
+    par(mar = c(4, 4, 3, 1))
+    
+    # Create a simple bar plot showing the single performance value
+    if(metric_name %in% names(cv_results)) {
+      perf_value <- cv_results[[metric_name]][1]
+      
+      barplot(perf_value,
+              names.arg = "Model\nPerformance",
+              col = rgb(0, 0.48, 1, 0.7),
+              border = "darkblue",
+              main = paste("Cross-Validation", metric_name),
+              ylab = metric_name,
+              las = 1,
+              cex.main = 1.0,
+              ylim = c(0, perf_value * 1.1))
+      
+      # Add value on top of bar
+      text(1, perf_value, 
+           labels = format(round(perf_value, 0), big.mark = ","),
+           pos = 3, cex = 0.8, col = "darkblue", font = 2)
+      
+    } else {
+      plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+      text(1, 1, "Single configuration:\nNo comparison needed.", cex = 1.0)
+    }
+    return()
+  }
+  
+  # Multiple configurations - create comparison plot
+  if(!metric_name %in% names(cv_results)) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, paste("Metric", metric_name, "\nnot found"), cex = 1.0)
+    return()
+  }
+  
+  par(mar = c(4, 4, 3, 1))
+  
+  x_vals <- 1:nrow(cv_results)
+  y_vals <- cv_results[[metric_name]]
+  
+  plot(x_vals, y_vals,
+       type = "b",
+       col = "blue",
+       lwd = 2,
+       pch = 19,
+       cex = 1.5,
+       main = paste("Hyperparameter Performance by", metric_name),
+       xlab = "Configuration",
+       ylab = metric_name,
+       las = 1,
+       cex.main = 1.0,
+       cex.lab = 0.9)
+  
+  grid(nx = NULL, ny = NULL, col = "lightgray", lty = "dotted")
+  
+  best_idx <- if(metric_name %in% c("RMSE", "MAE")) which.min(y_vals) else which.max(y_vals)
+  points(x_vals[best_idx], y_vals[best_idx], col = "red", pch = 19, cex = 2)
+  
+  legend("topright",
+         legend = c("Performance", "Best"),
+         col = c("blue", "red"),
+         pch = 19,
+         cex = 0.8,
+         bty = "n")
+  
+}, height = 300)
+
+
+# Variable importance plot - FINAL VERSION
+output$variable_importance_plot <- renderPlot({
+  
+  if(is.null(mc_results())) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "Run Monte Carlo simulation first", cex = 1.0)
+    return()
+  }
+  
+  results <- mc_results()
+  
+  if(!results$tuning_applied) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "Variable importance\nnot available:\nNo hyperparameter tuning applied.", cex = 1.0)
+    return()
+  }
+  
+  # Linear models don't produce variable importance
+  model_method <- results$hyperparameters_used$model_method
+  
+  if(model_method %in% c("lm", "glm")) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, paste0("Variable importance not available\nfor linear models (", model_method, ").\n\nTry Random Forest or GBM\nfor variable importance."), cex = 0.9)
+    return()
+  }
+  
+  # For other models, try to get variable importance
+  if(is.null(results$tuning_results$variable_importance)) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "Variable importance\nnot calculated for this model.", cex = 1.0)
+    return()
+  }
+  
+  var_imp <- results$tuning_results$variable_importance
+  
+  tryCatch({
+    if(inherits(var_imp, "varImp.train") || "importance" %in% names(var_imp)) {
+      imp_df <- if("importance" %in% names(var_imp)) {
+        as.data.frame(var_imp$importance)
+      } else {
+        as.data.frame(var_imp)
+      }
+      
+      if(nrow(imp_df) > 0 && ncol(imp_df) > 0) {
+        par(mar = c(4, 8, 3, 1))
+        
+        imp_vals <- imp_df[, 1]
+        var_names <- rownames(imp_df)
+        
+        ord <- order(imp_vals)
+        imp_vals <- imp_vals[ord]
+        var_names <- var_names[ord]
+        
+        barplot(imp_vals,
+                names.arg = var_names,
+                horiz = TRUE,
+                las = 1,
+                col = rgb(0, 0.48, 1, 0.7),
+                border = "darkblue",
+                main = "Variable Importance",
+                xlab = "Importance",
+                cex.names = 0.8,
+                cex.main = 1.0)
+      }
+    } else {
+      plot(var_imp, main = "Variable Importance")
+    }
+  }, error = function(e) {
+    plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+    text(1, 1, "Error plotting\nvariable importance", cex = 1.0)
+  })
+  
+}, height = 300)
+
+# CV Summary - Already correct, no changes needed
+output$cv_summary <- renderText({
+  req(mc_results())
+  results <- mc_results()
+  
+  if(results$tuning_applied) {
+    paste0(
+      "Cross-Validation Summary\n",
+      "========================\n\n",
+      "Model Method: ", results$hyperparameters_used$model_method, "\n",
+      "Monte Carlo CV: LGOCV (ART-TREES compliant)\n",
+      "CV Folds: ", results$hyperparameters_used$cv_folds, "\n",
+      "Training Percentage: 0.75\n",
+      "Performance Metric: ", results$hyperparameters_used$performance_metric, "\n",
+      "Preprocessing: ", if(results$hyperparameters_used$enable_preprocessing) "Enabled (Center/Scale)" else "Disabled", "\n",
+      "Feature Selection: ", if(results$hyperparameters_used$enable_feature_selection) "Enhanced" else "Basic", "\n",
+      "Bias Correction Applied: ", round(results$bias_correction_factor, 4), "\n\n",
+      "**Impact:** This optimization helps train an uncertainty-reduction model\n",
+      "based on synthetic Monte Carlo samples, aiming to reduce the\n",
+      "final uncertainty deduction (UA) as allowed by ART TREES V2.0."
+    )
+  } else {
+    paste0(
+      "Cross-Validation Summary\n",
+      "========================\n\n",
+      "Model Method: Standard Monte Carlo\n",
+      "Status: Optimization not applied (e.g., small dataset, LM model)\n",
+      "Bias Correction: 1.0 (No correction)\n\n",
+      "The simulation runs in standard mode, calculating uncertainty\n",
+      "directly from input CIs using error propagation rules."
+    )
+  }
+})
 	
 	# ============================================================================
 	# SOURCE CODE TAB OUTPUTS FOR AUDITORS
