@@ -14,7 +14,7 @@ pacman::p_load(
 	ggplot2, gbm,
 	MASS, magrittr,
 	plotly,
-	shiny, shinyWidgets, shinyjs,
+	shiny, shinyWidgets, shinyjs, sessioninfo,
 	thematic,
 	devtools # Added as requested for logging functionality
 ) 
@@ -733,7 +733,7 @@ ui <- page_fillable(
 		fillable = TRUE,
 		
 		sidebar = sidebar(
-			width = 220,
+			width = 300,
 			bg = "steelblue",
 			tags$li(class = "dropdown",
 							tags$a(
@@ -754,8 +754,6 @@ ui <- page_fillable(
 						 class = "btn-success btn-sm", style = "width: 100%;"),
 			actionButton("reset_hyperparameters", "Reset Defaults", 
 						 class = "btn-secondary btn-sm", style = "width: 100%"),
-			actionButton("save_hyperparameters", "Save Config", 
-						 class = "btn-info btn-sm", style = "width: 100%"),
 			
 			tags$hr(style="margin: 0.5rem 0;"),
 			h6("Simulation Regime"),
@@ -819,105 +817,107 @@ ui <- page_fillable(
 				)
 			),
 			
-			# TAB 2: Distribution
-			nav_panel(
-				title = "2. Distribution",
-				icon = icon("chart-bar"),
-				
-				layout_columns(
-					col_widths = c(3, 3, 3, 3),
-					fill = FALSE,
-					uiOutput("normality_box_output"),
-					value_box(
-						title = "Shapiro p-value", 
-						value = textOutput("shapiro_p_value_text"),
-						showcase = icon("calculator"), 
-						theme = "info"
-					),
-					value_box(
-						title = "Sample Size", 
-						value = textOutput("sample_size_text"),
-						showcase = icon("database"), 
-						theme = "secondary"
-					),
-					value_box(
-						title = "Transformation", 
-						value = textOutput("transformation_rec_text"),
-						showcase = icon("arrows-rotate"), 
-						theme = "success"
-					)
-				),
+# TAB 2: Distribution
+nav_panel(
+  title = "2. Distribution",
+  icon = icon("chart-bar"),
+  
+  # Value boxes row
+  layout_columns(
+    col_widths = c(3, 3, 3, 3),
+    fill = FALSE,
+    uiOutput("normality_box_output"),
+    value_box(
+      title = "Shapiro p-value", 
+      value = textOutput("shapiro_p_value_text"),
+      showcase = icon("calculator"), 
+      theme = "info"
+    ),
+    value_box(
+      title = "Sample Size", 
+      value = textOutput("sample_size_text"),
+      showcase = icon("database"), 
+      theme = "secondary"
+    ),
+    value_box(
+      title = "Transformation", 
+      value = textOutput("transformation_rec_text"),
+      showcase = icon("arrows-rotate"), 
+      theme = "success"
+    )
+  ),
 
-				layout_columns(
-					col_widths = c(3, 9),
-					fill = FALSE,
-					
-					card(
-						card_header("Controls"),
-						card_body(
-							selectInput("analysis_variable", "Variable:",
-								choices = list(
-									"LIF tC/km" = "LIF",
-									"AGB tC/ha" = "AGB",
-									"BGB tC/ha" = "BGB", 
-									"Saplings tC/ha" = "Saplings",
-									"Litter tC/ha" = "Litter",
-									"Standing Dead tC/ha" = "Standing_Dead",
-									"Lying Dead tC/ha" = "Lying_Dead",
-									"Soil tC/ha" = "Soil",
-									"LDF tC/m³" = "LDF"
-								),
-								selected = "Litter"
-							),
-							checkboxInput("use_preloaded_data", "Use Pre-loaded", value = TRUE),
-							actionButton("analyze_distribution", "Analyze", 
-										 class = "btn-primary btn-sm", style = "width: 100%;")
-						)
-					),
-
-					layout_columns(
-						col_widths = c(7, 5),
-						fill = FALSE,
-						card(
-							full_screen = TRUE,
-							card_header("Distribution Plot"),
-							card_body(
-								fillable = FALSE,
-								plotOutput("distribution_plot", height = "300px")
-							)
-						),
-						card(
-							card_header("Normality Summary"),
-							card_body(
-								fillable = FALSE,
-								div(style = "height: 300px; overflow-y: auto; font-size: 0.75rem;",
-									verbatimTextOutput("normality_summary")
-								)
-							)
-						)
-					)
-				),
-				
-				layout_columns(
-					col_widths = c(12),
-					fill = FALSE,
-					card(
-						card_header("Descriptive Statistics"),
-						card_body(
-							fillable = FALSE,
-							DT::dataTableOutput("descriptive_stats_table")
-						)
-					)
-				),
-				
-				card(
-					card_header("All Variables Analysis"),
-					card_body(
-						fillable = FALSE,
-						DT::dataTableOutput("all_variables_analysis")
-					)
-				)
-			),
+  # Controls + Distribution Plot + Normality Summary
+  layout_columns(
+    col_widths = c(3, 5, 4),  # ADJUSTED: 3 for controls, 5 for plot, 4 for summary
+    fill = FALSE,
+    
+    card(
+      card_header("Controls"),
+      card_body(
+        fillable = FALSE,
+        selectInput("analysis_variable", "Variable:",
+          choices = list(
+            "LIF tC/km" = "LIF",
+            "AGB tC/ha" = "AGB",
+            "BGB tC/ha" = "BGB", 
+            "Saplings tC/ha" = "Saplings",
+            "Litter tC/ha" = "Litter",
+            "Standing Dead tC/ha" = "Standing_Dead",
+            "Lying Dead tC/ha" = "Lying_Dead",
+            "Soil tC/ha" = "Soil",
+            "LDF tC/m³" = "LDF"
+          ),
+          selected = "Litter"
+        ),
+        checkboxInput("use_preloaded_data", "Use Pre-loaded", value = TRUE)
+      )
+    ),
+    
+    card(
+      full_screen = TRUE,
+      card_header("Distribution Plot"),
+      card_body(
+        fillable = FALSE,
+        plotOutput("distribution_plot", height = "400px")  # INCREASED HEIGHT
+      )
+    ),
+    
+    card(
+      card_header("Normality Summary"),
+      card_body(
+        fillable = FALSE,
+        div(style = "height: 400px; overflow-y: auto; font-size: 0.75rem;",
+          verbatimTextOutput("normality_summary")
+        )
+      )
+    )
+  ),
+  
+  # NEW: Descriptive Statistics + All Variables Analysis SIDE-BY-SIDE
+  layout_columns(
+    col_widths = c(6, 6),  # 50-50 split
+    fill = FALSE,
+    card(
+      card_header("Descriptive Statistics"),
+      card_body(
+        fillable = FALSE,
+        div(style = "height: 450px; overflow-y: auto;",
+          DT::dataTableOutput("descriptive_stats_table")
+        )
+      )
+    ),
+    card(
+      card_header("All Variables Analysis"),
+      card_body(
+        fillable = FALSE,
+        div(style = "height: 450px; overflow-y: auto;",
+          DT::dataTableOutput("all_variables_analysis")
+        )
+      )
+    )
+  )
+),
 
 # TAB 3: Hyperparameter Tuning
 nav_panel(
@@ -1058,7 +1058,7 @@ nav_panel(
 						card_body(
 							fillable = FALSE, 
 							plotOutput("enhanced_distribution_plot", 
-													 height = "400px"))
+													 height = "450px"))
 					),
 					card(
 						card_header("Uncertainty Summary"),
@@ -1618,22 +1618,6 @@ mc_results <- eventReactive(input$run_simulation, {
 		showNotification("Hyperparameters reset to stable defaults", type = "message")
 	})
 	
-	# Save hyperparameter configuration 	
-	observeEvent(input$save_hyperparameters, {
-		config <- list(
-			model_method = input$model_method,
-			performance_metric = input$performance_metric,
-			cv_folds = input$cv_folds,
-			tune_length = input$tune_length,
-			enable_preprocessing = input$enable_preprocessing,
-			enable_feature_selection = input$enable_feature_selection,
-			timestamp = Sys.time()
-		)
-		
-		saveRDS(config, file = "art_trees_hyperparameter_config.rds")
-		showNotification("Hyperparameter configuration saved", type = "success")
-	})
-
 
 # Clear model history
 observeEvent(input$clear_history, {
@@ -2661,12 +2645,14 @@ output$cv_summary <- renderText({
 	# SOURCE CODE TAB OUTPUTS FOR AUDITORS
 	# ============================================================================
 	
+
 	# NEW: Session Info Log
 	output$session_info_log <- renderPrint({
-		# Using base R function for general compatibility, but fulfilling the "runtime log" request.
-		sessioninfo::session_info()
+  # Use base R sessionInfo() instead of sessioninfo package
+  sessionInfo()
 	})
-	
+
+
 	# NEW: Render the Source Code Content
 	output$runtime_source_code <- renderText({
 		# Reads and renders the content of the running app.R file.

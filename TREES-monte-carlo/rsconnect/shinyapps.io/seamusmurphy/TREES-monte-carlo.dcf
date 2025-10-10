@@ -5,7 +5,7 @@ account: seamusmurphy
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 15582399
-bundleId: 10960290
+bundleId:
 url: https://seamusmurphy.shinyapps.io/trees-monte-carlo/
 version: 1
 asMultiple: FALSE

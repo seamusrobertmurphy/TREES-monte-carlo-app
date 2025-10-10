@@ -5,7 +5,7 @@ account: seamusmurphy
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 15580445
-bundleId: 10960296
+bundleId: 11014926
 url: https://seamusmurphy.shinyapps.io/winrock-monte-carlo/
 version: 1
 asMultiple: FALSE
