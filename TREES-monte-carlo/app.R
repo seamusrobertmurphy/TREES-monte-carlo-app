@@ -1309,14 +1309,16 @@ server <- function(input, output, session) {
 						if("LDF_tC_m3" %in% names(ldf_data)) {
 							data_vec <- suppressWarnings(as.numeric(ldf_data$LDF_tC_m3))
 							data_clean <- na.omit(data_vec)
-
+							
 							# FILTER ZEROS for LDF
 							data_clean_filtered <- data_clean[data_clean > 0]
 							if(length(data_clean_filtered) >= 3) {
 								data_clean <- data_clean_filtered
-							} else {
-								next
-							}
+								cat("Auto-load: Filtered zeros for LDF_tC_m3. New N:", length(data_clean), "\n")
+								} else {
+									cat("Auto-load: Warning - Filtering zeros on LDF resulted in < 3 samples. Skipping.\n")
+									}
+        
 							
 							if(length(data_clean) >= 3) {
 								sw_test <- shapiro.test(data_clean[1:min(5000, length(data_clean))])
@@ -1538,23 +1540,35 @@ mc_results <- eventReactive(input$run_simulation, {
 				}
 			}
 			
-			# Read LDF_Prepared.csv
-			if(file.exists("LDF_Prepared.csv")) {
-				ldf_data <- read.csv("LDF_Prepared.csv", stringsAsFactors = FALSE)
-				
-				cat("Actual column names in LDF data:", paste(names(ldf_data), collapse=", "), "\n")
-				
-				if("LDF_tC_m3" %in% names(ldf_data)) {
-					data_vec <- suppressWarnings(as.numeric(ldf_data$LDF_tC_m3))
-					data_clean <- na.omit(data_vec)
+				# Read LDF_Prepared.csv
+if(file.exists("LDF_Prepared.csv")) {
+    ldf_data <- read.csv("LDF_Prepared.csv", stringsAsFactors = FALSE)
+    
+    cat("Actual column names in LDF data:", paste(names(ldf_data), collapse=", "), "\n")
+    
+    if("LDF_tC_m3" %in% names(ldf_data)) {
+        data_vec <- suppressWarnings(as.numeric(ldf_data$LDF_tC_m3))
+        data_clean <- na.omit(data_vec)
 
-					# FILTER ZEROS for LDF
-					data_clean_filtered <- data_clean[data_clean > 0]
-					if(length(data_clean_filtered) >= 3) {
-						data_clean <- data_clean_filtered
-					} else {
-						next
-					}
+        # FILTER ZEROS for LDF - more thorough filtering
+        data_clean_filtered <- data_clean[data_clean > 0.1]  # Filter very small values too
+        if(length(data_clean_filtered) >= 3) {
+            data_clean <- data_clean_filtered
+            cat("Filtered zeros/low values for LDF_tC_m3. Original N:", length(data_vec), 
+                "Final N:", length(data_clean), "\n")
+        } else {
+            cat("Warning: Filtering zeros on LDF resulted in < 3 samples. Skipping LDF.\n")
+        }
+
+        # FILTER ZEROS for LDF
+        data_clean_filtered <- data_clean[data_clean > 0]
+        if(length(data_clean_filtered) >= 3) {
+            data_clean <- data_clean_filtered
+            cat("Filtered zeros for LDF_tC_m3. New N:", length(data_clean), "\n")
+        } else {
+            cat("Warning: Filtering zeros on LDF resulted in < 3 samples.\n")
+        }
+        
 					
 					if(length(data_clean) >= 3) {
 						sw_test <- shapiro.test(data_clean[1:min(5000, length(data_clean))])
@@ -1985,6 +1999,10 @@ output$net_errs_comparison_plot <- renderPlot({
 				data_to_plot <- data_to_plot[data_to_plot > 0]
 		}
 		
+		# DEBUG: Check for duplication issues
+    cat("DEBUG - Variable:", current_input_var, "| Length:", length(data_to_plot), 
+        "| Unique values:", length(unique(data_to_plot)), "\n")
+    
 		if(length(data_to_plot) == 0) {
 			plot(1, 1, type = "n", axes = FALSE, xlab = "", ylab = "")
 			text(1, 1, paste("No non-zero data available for", current_input_var), cex = 0.8)
@@ -1996,7 +2014,14 @@ output$net_errs_comparison_plot <- renderPlot({
 		
 		par(mar = c(4, 4, 2, 1))
 		
-		bins = 30
+		# Adaptive binning based on data characteristics
+		# For LDF: use fewer bins to show the right-skewed distribution clearly
+    if(current_input_var == "LDF") {
+    	bins <- "Sturges"  # R's default algorithm, works well for skewed data
+    	} else {
+    		bins <- 30
+    		}
+		
 		h <- hist(data_to_plot, breaks = bins, plot = FALSE)
 
 		p_val_display_plot <- format(as.numeric(var_stats$p_value), scientific = FALSE)
