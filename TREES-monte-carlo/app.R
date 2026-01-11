@@ -703,12 +703,12 @@ ui <- page_fillable(
 	tags$div(id = "code_tools_dropdown",
 		shinyWidgets::dropdown(
 			tagList(
-				tags$h5("Code Tools & Auditing", style="color:#007bff; margin-top: 5px;"),
-				hr(style="margin: 5px 0;"),
+				tags$h5("Code Tools & Auditing", style="color:#007bff; margin-top: 0.5px;"),
+				hr(style="margin: 0.5px 0;"),
 				actionButton("link_to_source", "Expose/View Source Code", class = "btn-secondary btn-sm", width = "100%", 
 							 onclick = "Shiny.setInputValue('main_tabs', 'Source Code', {priority: 'event'});"),
 				downloadButton("download_full_source", "Download App.R File", class = "btn-info btn-sm", width = "100%"),
-				hr(style="margin: 5px 0;"),
+				hr(style="margin: 0.5px 0;"),
 				actionButton("link_to_github", "Edit on GitHub", class = "btn-secondary btn-sm", width = "100%", 
 							 onclick = "window.open('https://github.com/seamusrobertmurphy/TREES-monte-carlo-app.git', '_blank')"),
 				actionButton("link_to_issues", "Report an Issue", class = "btn-danger btn-sm", width = "100%", 
@@ -1149,7 +1149,7 @@ nav_panel(
 					card(
 						card_header("Runtime Log"),
 					  card_body(
-						div(style = "height: 550px; overflow-y: auto; font-size: 0.5rem;",
+						div(style = "height: 1000px; overflow-y: auto; font-size: 0.8rem;",
 						    verbatimTextOutput("session_info_log")
 								)
 						)),
@@ -1157,7 +1157,7 @@ nav_panel(
 					card(
 						card_header("Runtime Source"),
 						card_body(
-							div(style = "height: 550px; overflow-y: scroll; white-space: pre-wrap; font-family: 'Fira Code', monospace; font-size: 0.6rem; background-color: #2b3238; padding: 1px; border-radius: 1px; color: #ced4da;",
+							div(style = "height: 1000px; overflow-y: scroll; white-space: pre-wrap; font-family: 'Fira Code', monospace; font-size: 0.9rem; background-color: #2b3238; padding: 1px; border-radius: 1px; color: #ced4da;",
 								verbatimTextOutput("runtime_source_code")
 							)
 						)
@@ -1169,18 +1169,18 @@ nav_panel(
 
 				# Card 3: Code Tools and Download/Edit Links (Simplified)
 				card(
-					card_body(style = "padding: 0.75rem 0.5rem;",
+					card_body(style = "padding: 0.5rem 0.5rem;",
 						layout_columns(
 							col_widths = c(4, 4, 4),
 
 						# Simple Download button
-						downloadButton("download_report", "Download Script & Log", class = "btn-primary btn-sm", style = "width: 100%; margin: 1px;"),
+						downloadButton("download_report", "Download Script & Log", class = "btn-primary btn-sm", style = "width: 100%; margin: 0.5px;"),
 						
 						# GitHub Edit
-						actionButton("link_to_github_main", "Contributor Tools", class = "btn-secondary", style = "width: 100%; margin: 1px;",
+						actionButton("link_to_github_main", "Contributor Tools", class = "btn-secondary", style = "width: 100%; margin: 0.5px;",
 									 onclick = "window.open('https://github.com/seamusrobertmurphy/TREES-monte-carlo-app', '_blank')"),
 						# Issue Tracker
-						actionButton("link_to_issues_main", "Report an Issue", class = "btn-danger", style = "width: 100%; margin: 1px;",
+						actionButton("link_to_issues_main", "Report an Issue", class = "btn-danger", style = "width: 100%; margin: 0.5px;",
 									 onclick = "window.open('https://github.com/seamusrobertmurphy/TREES-monte-carlo-app/issues', '_blank')")
 						)
 					)
